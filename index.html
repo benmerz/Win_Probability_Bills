@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bills Win Probability Graphs</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .game { margin-bottom: 40px; border: 1px solid #ccc; padding: 10px; }
+        .most-exciting { border: 3px solid red; background-color: #ffe6e6; }
+        canvas { border: 1px solid #000; }
+    </style>
+</head>
+<body>
+    <h1>Bills Win Probability by Week</h1>
+    <div id="games"></div>
+
+    <script>
+        async function loadData() {
+            const response = await fetch('final_data.csv');
+            const text = await response.text();
+            const lines = text.trim().split('\n');
+            const data = lines.map(line => line.split('|')).slice(1); // skip header
+
+            const games = {};
+            data.forEach(row => {
+                const [game_id, week, home_team, away_team, excitement, play_num, wp] = row;
+                if (!games[week]) games[week] = {};
+                if (!games[week][game_id]) {
+                    games[week][game_id] = { home_team, away_team, excitement: parseFloat(excitement), plays: [] };
+                }
+                games[week][game_id].plays.push({ play_num: parseInt(play_num), wp: parseFloat(wp) });
+            });
+
+            const container = document.getElementById('games');
+            let maxExcitement = 0;
+            const gameDivs = [];
+            Object.keys(games).sort((a,b) => parseInt(a) - parseInt(b)).forEach(week => {
+                const weekDiv = document.createElement('div');
+                weekDiv.innerHTML = `<h2>Week ${week}</h2>`;
+                container.appendChild(weekDiv);
+
+                Object.keys(games[week]).forEach(game_id => {
+                    const game = games[week][game_id];
+                    maxExcitement = Math.max(maxExcitement, game.excitement);
+                    const gameDiv = document.createElement('div');
+                    gameDiv.className = 'game';
+                    gameDiv.innerHTML = `<h3>${game.home_team} vs ${game.away_team} - Excitement: ${game.excitement}/100</h3>`;
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 800;
+                    canvas.height = 400;
+                    gameDiv.appendChild(canvas);
+                    weekDiv.appendChild(gameDiv);
+                    gameDivs.push({ div: gameDiv, excitement: game.excitement });
+
+                    drawChart(canvas, game.plays);
+                });
+            });
+
+            // Highlight the most exciting game
+            gameDivs.forEach(item => {
+                if (item.excitement === maxExcitement) {
+                    item.div.classList.add('most-exciting');
+                    const h3 = item.div.querySelector('h3');
+                    h3.textContent = '🏆 MOST EXCITING GAME - ' + h3.textContent;
+                }
+            });
+        }
+
+        function drawChart(canvas, plays) {
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+            const margin = 40;
+
+            const maxPlay = Math.max(...plays.map(p => p.play_num));
+            const minWp = 0;
+            const maxWp = 1;
+
+            // Draw axes
+            ctx.beginPath();
+            ctx.moveTo(margin, margin);
+            ctx.lineTo(margin, height - margin);
+            ctx.lineTo(width - margin, height - margin);
+            ctx.stroke();
+
+            // Labels
+            ctx.fillText('Play Number', width / 2, height - 10);
+            ctx.save();
+            ctx.translate(10, height / 2);
+            ctx.rotate(-Math.PI / 2);
+            ctx.fillText('Win Probability', 0, 0);
+            ctx.restore();
+
+            // Y ticks
+            for (let i = 0; i <= 10; i++) {
+                const y = margin + (height - 2 * margin) * (1 - i / 10);
+                ctx.beginPath();
+                ctx.moveTo(margin - 5, y);
+                ctx.lineTo(margin, y);
+                ctx.stroke();
+                ctx.fillText((i / 10).toFixed(1), margin - 30, y + 5);
+            }
+
+            // Plot line
+            ctx.beginPath();
+            plays.forEach((p, i) => {
+                const x = margin + (width - 2 * margin) * (p.play_num - 1) / (maxPlay - 1);
+                const y = margin + (height - 2 * margin) * (1 - p.wp);
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            });
+            ctx.strokeStyle = 'blue';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+
+        loadData();
+    </script>
+</body>
+</html>
